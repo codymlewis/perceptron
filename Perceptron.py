@@ -10,8 +10,8 @@ Date: 2019-03-06
 import numpy as np
 import matplotlib.pyplot as plt
 
-def activate(x, a=1, b=0):
-    return 1 / (1 + np.exp(-a * x - b))
+def activate(x_value, coefficient=1, constant=0):
+    return 1 / (1 + np.exp(-coefficient * x_value - constant))
 
 def activation_strength(weight, node_state):
     '''
@@ -19,8 +19,8 @@ def activation_strength(weight, node_state):
     '''
     strength = 0
 
-    for i in zip(weight, node_state):
-        strength += i[0] * i[1]
+    for weight_node_state in zip(weight, node_state):
+        strength += weight_node_state[0] * weight_node_state[1]
 
     return strength
 
@@ -30,8 +30,9 @@ def predict(inputs, connected_matrix, output_neuron, weights):
     '''
     node_states = np.array([0 for _ in range(len(inputs))])
 
-    for i in range(len(inputs)):
-        node_states[i] = inputs[i] * connected_matrix[output_neuron][i]
+    for index_input in enumerate(inputs):
+        node_states[index_input[0]] = index_input[1] * \
+            connected_matrix[output_neuron][index_input[0]]
 
     return activate(activation_strength(weights, node_states))
 
@@ -47,9 +48,10 @@ def find_error(inputs, target_responses, connected_matrix, output_neuron, weight
     '''
     error = 0
 
-    for i in range(len(target_responses)):
-        prediction = predict(inputs[i], connected_matrix, output_neuron, weights)
-        error += np.power((target_responses[i] - prediction), 2)
+    for index_target_responses in enumerate(target_responses):
+        prediction = predict(inputs[index_target_responses[0]],
+                             connected_matrix, output_neuron, weights)
+        error += np.power((index_target_responses[1] - prediction), 2)
 
     return np.sqrt(error)
 
@@ -65,8 +67,9 @@ def hill_climb(error_goal, inputs, target_responses, weights, connected_matrix, 
     while(error_goal < error_champ) and (counter < n_epochs):
         step_size = 0.02 * np.random.normal()
         mutant_weights = weights.copy()
-        for i in range(len(mutant_weights)):
-            mutant_weights[i] += step_size * np.random.normal()
+        for index_mutant_weights in enumerate(mutant_weights):
+            mutant_weights[index_mutant_weights[0]] += step_size * \
+                np.random.normal()
 
         error_mutant = find_error(inputs, target_responses,
                                   connected_matrix, output_neuron,
@@ -89,7 +92,7 @@ if __name__ == '__main__':
         [1, 1, 0],
         [1, 1, 1]
     ])
-    TARGET_RESPONSES = np.array([0, 1, 1, 1])
+    TARGET_RESPONSES = np.array([1, 1, 1, 0])
     CONNECTED_MATRIX = np.array([
         [0, 0, 0, 1],
         [0, 0, 0, 1],
