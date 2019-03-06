@@ -7,10 +7,48 @@ Author: Cody Lewis
 Date: 2019-03-06
 '''
 
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
+def read_csv(filename):
+    '''
+    Read a csv detailing the inputs and outputs and return them in a np array format.
+    '''
+    inputs = []
+    responses = []
+
+    with open(filename) as csv:
+        for line in csv:
+            input_line = []
+            while line.find(",") > -1:
+                input_line.append(int(line[:line.find(",")]))
+                line = line[line.find(",") + 1:]
+            inputs.append(input_line)
+            responses.append(int(line))
+
+    return np.array(inputs), np.array(responses)
+
+def create_connected_matrix(input_len):
+    '''
+    Create the connectedness matrix for a single layer neural network perceptron.
+    '''
+    connected_matrix = []
+
+    for _ in range(input_len):
+        connected_row = [0 for _ in range(input_len)]
+        connected_row.append(1)
+        connected_matrix.append(connected_row)
+    final_row = [1 for _ in range(input_len)]
+    final_row.append(0)
+    connected_matrix.append(final_row)
+
+    return np.array(connected_matrix)
+
 def activate(x_value, coefficient=1, constant=0):
+    '''
+    Perform the sigmoid function to determine whether a neuron is activated.
+    '''
     return 1 / (1 + np.exp(-coefficient * x_value - constant))
 
 def activation_strength(weight, node_state):
@@ -83,23 +121,12 @@ def hill_climb(error_goal, inputs, target_responses, weights, connected_matrix, 
 
     return weights, error_champ, errors
 
-
 if __name__ == '__main__':
     ERROR_GOAL = 0.1
-    INPUTS = np.array([
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 0],
-        [1, 1, 1]
-    ])
-    TARGET_RESPONSES = np.array([1, 1, 1, 0])
-    CONNECTED_MATRIX = np.array([
-        [0, 0, 0, 1],
-        [0, 0, 0, 1],
-        [0, 0, 0, 1],
-        [1, 1, 1, 0]
-    ])
-    OUTPUT_NEURON = 3
+    ARGS = sys.argv[1:]
+    INPUTS, TARGET_RESPONSES = read_csv(ARGS[0] if ARGS else "AND2.csv")
+    CONNECTED_MATRIX = create_connected_matrix(len(INPUTS[0]))
+    OUTPUT_NEURON = len(CONNECTED_MATRIX) - 1
     WEIGHTS = np.array([np.random.normal() for _ in range(len(CONNECTED_MATRIX) - 1)])
     print(WEIGHTS)
     WEIGHTS, ERROR_CHAMP, ERRORS = hill_climb(ERROR_GOAL, INPUTS, TARGET_RESPONSES, WEIGHTS, CONNECTED_MATRIX, OUTPUT_NEURON)
