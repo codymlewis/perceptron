@@ -1,49 +1,169 @@
 #!/usr/bin/env python3
 
+
+import argparse
+
+import numpy as np
+import pandas as pd
+
+
 '''
-An implementation of a simple perceptron.
+An implementation of a multi-layer perceptron.
 
 Author: Cody Lewis
-Date: 2019-03-06
+Date: 2019-09-21
 '''
 
-import sys
-import numpy as np
-import matplotlib.pyplot as plt
 
-def read_csv(filename):
-    '''
-    Read a csv detailing the inputs and outputs and return them in a np array format.
-    '''
-    inputs = []
-    responses = []
+class Neuron:
+    '''A neuron of the perceptron'''
+    def __init__(self, input_layer=False):
+        self.activation_strength = 0
+        self.connections = []
+        self.is_input_layer = input_layer
 
-    with open(filename) as csv:
-        for line in csv:
-            input_line = []
-            while line.find(",") > -1:
-                input_line.append(int(line[:line.find(",")]))
-                line = line[line.find(",") + 1:]
-            inputs.append(input_line)
-            responses.append(int(line))
+    def connect(self, other):
+        '''Connect a neuron to this'''
+        self.connections.append(Connection(self, other))
 
-    return np.array(inputs), np.array(responses)
+    def input(self, value):
+        '''Input a value into this neuron'''
+        self.activation_strength = value
 
-def create_connected_matrix(input_len):
-    '''
-    Create the connectedness matrix for a single layer neural network perceptron.
-    '''
-    connected_matrix = []
+    def output(self):
+        '''Recieve a final output from this neuron with softmax activation'''
+        val = np.exp(self.activation_strength)
+        self.activation_strength = 0
+        return val
 
-    for _ in range(input_len):
-        connected_row = [0 for _ in range(input_len)]
-        connected_row.append(1)
-        connected_matrix.append(connected_row)
-    final_row = [1 for _ in range(input_len)]
-    final_row.append(0)
-    connected_matrix.append(final_row)
+    def mutate(self, step_size):
+        '''Mutate the weights of the connections on this neuron'''
+        for connection in self.connections:
+            connection.mutate_weight(step_size)
 
-    return np.array(connected_matrix)
+    def revert(self):
+        '''Reset the weights of the connections on this neuron'''
+        for connection in self.connections:
+            connection.revert_weight()
+
+    def activate(self):
+        '''Activate this neuron'''
+        for connection in self.connections:
+            if self.is_input_layer:
+                connection.activate(self.activation_strength)
+            else:
+                connection.activate(activate(self.activation_strength))
+        self.activation_strength = 0
+
+    def activated(self, value):
+        '''Get activated with the value'''
+        self.activation_strength += value
+
+
+class Connection:
+    '''A connection between 2 neurons'''
+    def __init__(self, from_node, to_node):
+        self.from_node = from_node
+        self.to_node = to_node
+        self.weight = np.random.normal()
+        self.cached_weight = 0
+
+    def activate(self, value):
+        '''Activate the neuron that this connects to with the value'''
+        self.to_node.activated(value * self.weight)
+
+    def mutate_weight(self, step_size):
+        '''Mutate the weight of this'''
+        self.cached_weight = self.weight
+        self.weight += step_size * np.random.normal()
+
+    def revert_weight(self):
+        '''Reset the weight mutation'''
+        self.weight = self.cached_weight
+
+
+class Perceptron:
+    '''A multi layer perceptron implementation'''
+    def __init__(self, structure):
+        self.layers = [
+            [Neuron(i == 0) for _ in range(layer_size)]
+            for i, layer_size in enumerate(structure)
+        ]
+
+        for i in range(len(self.layers) - 1):
+            for neuron in self.layers[i]:
+                for next_neuron in self.layers[i + 1]:
+                    neuron.connect(next_neuron)
+
+    def summary(self):
+        print(f"{'-' * 5} [Perceptron Summary] {'-' * 5}")
+        num_layers = len(self.layers)
+        for i, layer in enumerate(self.layers):
+            if i == 0:
+                layer_type = "Input Layer"
+            elif i == num_layers - 1:
+                layer_type = "Output Layer"
+            else:
+                layer_type = f"Hidden Layer {i}"
+            print(f"{layer_type}:\t{len(layer)}")
+        print("-" * 32)
+
+    def predict(self, inputs):
+        '''Predict a value given the inputs'''
+        for i, inp in enumerate(inputs):
+            self.layers[0][i + 1].input(inp)
+        # Set up bias
+        self.layers[0][0].input(1)
+
+        for layer in self.layers[:-1]:
+            for neuron in layer:
+                neuron.activate()
+
+        outputs = []
+        for neuron in self.layers[-1]:
+            outputs.append(neuron.output())
+        denominator = np.sum(outputs)
+        activations = []
+        for output in outputs:
+            activations.append(output / denominator)
+
+        return activations
+
+    def classify(self, inputs):
+        '''
+        Find the classification given a prediction for the prediction of the
+        inputs
+        '''
+        return np.argmax(self.predict(inputs))
+
+    def learn(self, error_goal, inputs, target_responses, verbose=False):
+        '''Learn the weights for the network using evolutionary hill descent'''
+        counter = 0
+        n_epochs = 10_000
+        error_champ = find_error(inputs, target_responses, self)
+        errors = [error_champ]
+        while(error_goal < error_champ) and (counter < n_epochs):
+            if verbose:
+                print(f"\rEpoch {counter + 1}, error: {error_champ}", end="")
+            step_size = 0.02 * np.random.normal()
+            for layer in self.layers[:-1]:
+                for neuron in layer:
+                    neuron.mutate(step_size)
+
+            error_mutant = find_error(inputs, target_responses, self)
+
+            if error_mutant < error_champ:
+                error_champ = error_mutant
+            else:
+                for layer in self.layers[:-1]:
+                    for neuron in layer:
+                        neuron.revert()
+            counter += 1
+            errors.append(error_champ)
+        if verbose:
+            print()
+        return error_champ, errors
+
 
 def activate(x_value, coefficient=1, constant=0):
     '''
@@ -51,96 +171,56 @@ def activate(x_value, coefficient=1, constant=0):
     '''
     return 1 / (1 + np.exp(-coefficient * x_value - constant))
 
-def activation_strength(weight, node_state):
-    '''
-    Find the activation strength of a neuron.
-    '''
-    strength = 0
 
-    for weight_node_state in zip(weight, node_state):
-        strength += weight_node_state[0] * weight_node_state[1]
-
-    return strength
-
-def predict(inputs, connected_matrix, output_neuron, weights):
-    '''
-    Predict from the perceptron for a given input.
-    '''
-    node_states = np.array([0 for _ in range(len(inputs))])
-
-    for index_input in enumerate(inputs):
-        node_states[index_input[0]] = index_input[1] * \
-            connected_matrix[output_neuron][index_input[0]]
-
-    return activate(activation_strength(weights, node_states))
-
-def get_response(inputs, connected_matrix, output_neuron, weights):
-    '''
-    Get a response from the perceptron for a given input.
-    '''
-    return int(np.round(predict(inputs, connected_matrix, output_neuron, weights)))
-
-def find_error(inputs, target_responses, connected_matrix, output_neuron, weights):
+def find_error(inputs, target_responses, perceptron):
     '''
     Find the error of the perceptron.
     '''
     error = 0
+    for i, target_response in zip(inputs, target_responses):
+        predictions = perceptron.predict(i)
+        error += log_loss(1, predictions[target_response])
+    return -error / len(inputs)
 
-    for index_target_responses in enumerate(target_responses):
-        prediction = predict(inputs[index_target_responses[0]],
-                             connected_matrix, output_neuron, weights)
-        error += np.power((index_target_responses[1] - prediction), 2)
 
-    return np.sqrt(error)
+def log_loss(label, prediction, eps=1e-15):
+    '''Find the log loss'''
+    # clip performs a minmax
+    np.clip(prediction, eps, 1 - eps)
+    return label * np.log2(prediction)
 
-def hill_climb(error_goal, inputs, target_responses, weights, connected_matrix, output_neuron):
-    '''
-    Evolutionary algorithm to find the optimal weights for the perceptron.
-    '''
-    counter = 0
-    n_epochs = 10_000
-    error_champ = find_error(inputs, target_responses, connected_matrix, output_neuron, weights)
-    errors = []
 
-    while(error_goal < error_champ) and (counter < n_epochs):
-        step_size = 0.02 * np.random.normal()
-        mutant_weights = weights.copy()
-        for index_mutant_weights in enumerate(mutant_weights):
-            mutant_weights[index_mutant_weights[0]] += step_size * \
-                np.random.normal()
+def eval_predictions(model, data, labels):
+    '''Evaluate the accuracy of predictions on the data made by the model'''
+    print("Input data\tPrediction\tTrue Label")
+    accuracy = 0
+    for row, label in zip(data, labels):
+        prediction = model.classify(row)
+        print(f"{row}\t\t{prediction}\t\t{label}")
+        accuracy += prediction == label
+    print(f"Accuracy: {100 * accuracy / len(labels)}%")
+    print()
 
-        error_mutant = find_error(inputs, target_responses,
-                                  connected_matrix, output_neuron,
-                                  mutant_weights)
 
-        if error_mutant < error_champ:
-            weights = mutant_weights
-            error_champ = error_mutant
-        errors.append(error_champ)
-        counter += 1
-
-    return weights, error_champ, errors
-
-if __name__ == '__main__':
-    ERROR_GOAL = 0.1
-    ARGS = sys.argv[1:]
-    INPUTS, TARGET_RESPONSES = read_csv(ARGS[0] if ARGS else "AND2.csv")
-    CONNECTED_MATRIX = create_connected_matrix(len(INPUTS[0]))
-    OUTPUT_NEURON = len(CONNECTED_MATRIX) - 1
-    WEIGHTS = np.array([np.random.normal() for _ in range(len(CONNECTED_MATRIX) - 1)])
-    print(WEIGHTS)
-    WEIGHTS, ERROR_CHAMP, ERRORS = hill_climb(ERROR_GOAL, INPUTS, TARGET_RESPONSES, WEIGHTS, CONNECTED_MATRIX, OUTPUT_NEURON)
-    CORRECT_RESPONSES = 0
-    for i in zip(INPUTS, TARGET_RESPONSES):
-        OUTPUT = get_response(i[0], CONNECTED_MATRIX, OUTPUT_NEURON, WEIGHTS)
-        if i[1] == OUTPUT:
-            CORRECT_RESPONSES += 1
-        print(f"Input: {i[0]}\tOutput: {OUTPUT}\tShould be: {i[1]}")
-    print(f"Percentage of correct responses: {CORRECT_RESPONSES / len(INPUTS) * 100}%")
-    print(f"Final Error: {ERROR_CHAMP}")
-    print(f"Final weights: {WEIGHTS}")
-
-    plt.plot(range(len(ERRORS)), ERRORS)
-    plt.xlabel("Iteration")
-    plt.ylabel("Average Error")
-    plt.show()
+if __name__ == "__main__":
+    PARSER = argparse.ArgumentParser(description="A multi-layer perceptron")
+    PARSER.add_argument("-f", "--file", dest="file", type=str, action="store",
+                        default="XOR2.csv",
+                        help="csv file cotaining the training data and labels")
+    PARSER.add_argument("-l", "--layers", dest="layers", type=int,
+                        action="store", default=[4], nargs="+",
+                        help="Number of neurons in the hidden layers")
+    ARGS = PARSER.parse_args()
+    DF = pd.read_csv(ARGS.file, header=None)
+    DATA = DF[DF.columns[:-1]].to_numpy()
+    LABELS = DF[DF.columns[-1]].to_numpy()
+    MODEL = Perceptron(
+        [np.shape(DATA)[1] + 1] + ARGS.layers + [len(np.unique(LABELS))]
+    )
+    print(f"Constructed Perceptron:")
+    MODEL.summary()
+    print()
+    eval_predictions(MODEL, DATA, LABELS)
+    MODEL.learn(0.01, DATA, LABELS, True)
+    print()
+    eval_predictions(MODEL, DATA, LABELS)
