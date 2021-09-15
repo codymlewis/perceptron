@@ -1,5 +1,5 @@
 # Perceptron
-A implementation of a simple neural network
+An object oriented implementation of a simple neural network. It is very ineffecient due to OO design, however, it was designed to be educational through the ease of seeing how it works.
 ## Installation
 ```
 pip3 -r requirements.txt
